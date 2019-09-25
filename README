@@ -1,0 +1,214 @@
+        Linuxthreads - POSIX 1003.1c kernel threads for Linux
+
+        Copyright 1996 Xavier Leroy (Xavier.Leroy@inria.fr)
+
+
+DESCRIPTION:
+
+This is release 0.5 (BETA) of LinuxThreads, a BiCapitalized
+implementation of the Posix 1003.1c "pthread" interface for Linux.
+
+Several implementations of pthread are already available for Linux
+(e.g. Chris Provenzano's implementation, which is part of recent
+releases of the Linux C library), but they are all user-level: all
+threads live within a single Linux process, which schedules the various
+threads itself.
+
+In contrast, LinuxThreads provides kernel-level threads: each thread
+is a separate Unix process, sharing its address space with the other
+threads through the new system call clone(). Scheduling between
+threads is handled by the kernel scheduler, just like scheduling
+between Unix processes.
+
+The advantages of kernel-level threads over user-level threads are:
+
+- supports multiprocessors;
+
+- possibly smoother scheduling, since the same scheduler (the kernel's)
+  handles both threads and other Unix processes;
+
+- no special action needed to make blocking system call suspend only
+  the calling thread, not all threads of the process (user-level
+  threads usually rely on a combination of select() and jacketing of
+  C library functions for system calls);
+
+- as a consequence of the above, more efficient I/O and
+  timer-based operations (no need for extra select() and gettimeofday()).
+
+The disadvantages are:
+
+- more expensive context switches between threads, at least when blocking
+  on conditions and mutexes;
+
+- thread creation is more expensive.
+
+
+REQUIREMENTS:
+
+- Linux version 2.0 and up (requires the new clone() system call
+  and the new realtime scheduler).
+
+- For Intel platforms: libc 5.2.18 or later is required.
+  5.2.18 or 5.4.12 are recommended; 5.3.12 and 5.4.7 have problems
+  (see below).
+
+- Also supports glibc (a.k.a. libc 6), which actually comes with
+  a specially-adapted version of this library.
+
+- Currently supports Intel, Alpha, Sparc, Motorola 68k and MIPS platforms.
+
+- Multiprocessors are supported.
+
+
+INSTALLATION:
+
+- Edit the Makefile, set the variables in the "Configuration" section.
+
+- Do "make".
+
+- Do "make install".
+
+
+USING LINUXTHREADS:
+
+        gcc -D_REENTRANT ... -lpthread
+
+A complete set of manual pages is included. Also see the subdirectory
+Examples/ for some sample programs.
+
+
+STATUS:
+
+- All functions in the Posix 1003.1c base interface implemented.
+  Partial support for priority scheduling also available.
+
+- For users of libc 5 (H.J.Lu's libc), a number of C library functions
+  are reimplemented or wrapped to make them thread-safe, including:
+  * malloc functions
+  * stdio functions (define _REENTRANT before including <stdio.h>)
+  * per-thread errno variable (define _REENTRANT before including <errno.h>)
+  * directory reading functions (opendir(), etc)
+  * sleep()
+  * gmtime(), localtime()
+
+  New library functions provided:
+  * flockfile(), funlockfile(), ftrylockfile()
+  * reentrant versions of network database functions (gethostbyname_r(), etc)
+    and password functions (getpwnam_r(), etc).
+
+  All versions of libc between 5.2.18 and 5.4.12 exclusive have
+  problems with the per-thread errno variable. Symptoms include
+  inability to do fdopen() on a pipe or socket. Either downgrade to
+  5.2.18 or upgrade to 5.4.12 or above.
+
+- libc 6 (glibc) provides much better thread support than libc 5,
+  and comes with a specially-adapted version of LinuxThreads.
+  For serious multithreaded programming, you should consider switching
+  to libc 6.
+
+
+WARNING:
+
+Many existing libraries are not compatible with LinuxThreads,
+either because they are not inherently thread-safe, or because they
+have not been compiled with the -D_REENTRANT.
+
+A prime example of the latter is Xlib. If you link it with
+LinuxThreads, you'll probably get an "unknown 0 error" very
+early. This is just a consequence of the Xlib binaries using the
+global variable "errno" to fetch error codes, while LinuxThreads and
+the C library use the per-thread "errno" location.
+
+See the file README.Xfree3.2 for info on how to compile the Xfree 3.2
+libraries to make them compatible with LinuxThreads.
+
+
+KNOWN BUGS AND LIMITATIONS:
+
+- Threads share pretty much everything they should share according
+  to the standard: memory space, file descriptors, signal handlers,
+  current working directory, etc. One thing that they do not share
+  is their pid's and parent pid's. According to the standard, they
+  should have the same, but that's one thing we cannot achieve
+  in this implementation (until the CLONE_PID flag to clone() becomes
+  usable).
+
+- The current implementation uses the two signals SIGUSR1 and SIGUSR2,
+  so user-level code cannot employ them. Ideally, there should be two
+  signals reserved for this library. One signal is used for restarting
+  threads blocked on mutexes or conditions; the other is for thread
+  cancellation.
+
+- The stacks for the threads are allocated high in the memory space,
+  below the stack of the initial process, and spaced 2M apart.
+  Stacks are allocated with the "grow on demand" flag, so they don't
+  use much virtual space initially (4k, currently), but can grow
+  up to 2M if needed.
+
+  Reserving such a large address space for each thread means that,
+  on a 32-bit architecture, no more than about 1000 threads can
+  coexist (assuming a 2Gb address space for user processes),
+  but this is reasonable, since each thread uses up one entry in the
+  kernel's process table, which is usually limited to 512 processes.
+
+  Another potential problem of the "grow on demand" scheme is that
+  nothing prevents the user from mmap'ing something in the 2M address
+  window reserved for a thread stack, possibly causing later extensions of
+  that stack to fail. Mapping at fixed addresses should be avoided
+  when using this library.
+
+- Signal handling does not fully conform to the Posix standard,
+  due to the fact that threads are here distinct processes that can be
+  sent signals individually, so there's no notion of sending a signal
+  to "the" process (the collection of all threads).
+  More precisely, here is a summary of the standard requirements
+  and how they are met by the implementation:
+
+  1- Synchronous signals (generated by the thread execution, e.g. SIGFPE)
+     are delivered to the thread that raised them.
+     (OK.)
+
+  2- A fatal asynchronous signal terminates all threads in the process.
+     (OK. The thread manager notices when a thread dies on a signal
+      and kills all other threads with the same signal.)
+
+  3- If one or several threads are waiting on a signal using
+     sigwait(), then that signal will be delivered to one of those threads.
+     (No, it will be delivered to the thread it's been sent to, based
+      on the pid.)
+
+  4- An asynchronous signal will be delivered to one of the threads
+     of the program which does not block the signal (it is unspecified
+     which).
+     (No, the signal is delivered to the thread it's been sent to,
+      as in 3- above.
+
+  5- The signal will be delivered to at most one thread.
+     (OK, except for signals generated from the terminal or sent to
+      the process group, which will be delivered to all threads.)
+
+- The realtime extensions (scheduling control) have not been tested
+  extensively. A known discrepancy with the POSIX standard is that
+  multiple threads waiting on a mutex are not restarted in priority
+  order when the mutex is unlocked: we just do first-suspended,
+  first-restarted.
+
+- The signal-safe semaphores (sem_post, etc) are not available on the
+  386 nor on the Sparc because these architectures do not provide atomic
+  compare-and-swap, neither load-reservation/store-conditional.
+  Various fallback, less efficient solutions are being considered.
+  For the time being, semaphores should not be used in programs that
+  are intended to run on all the Intel x86 line, including the 386.
+
+- The current implementations of the MIPS support assumes a MIPS ISA II
+  processor or better.  These processors support atomic operations by
+  ll/sc instructions.  Older R2000/R3000 series processors are not
+  supported yet; support for these will have higher overhead.
+
+- Mutexes, conditions, semaphores cannot be shared between processes.
+  This optional component of the Posix standard is not obvious to
+  implement efficiently (i.e. without reverting to SystemV IPCs)
+  and does not seem terribly useful to me. If you need to synchronize
+  processes (with distinct address spaces), you'd be better off
+  with traditional Unix synchronization tools (pipes, sockets, SystemV
+  IPCs, etc.)

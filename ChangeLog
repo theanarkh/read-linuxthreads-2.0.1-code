@@ -1,0 +1,20 @@
+Wed Jan 22 01:22:27 1997  Ulrich Drepper  <drepper@cygnus.com>
+
+	* linuxtheads/pthread.c (__pthread_initial_thread): Correct
+	initializer.
+	(__pthread_manager_thread): Likewise.
+	Reported by Andreas Jaeger.
+
+Sat Jan 18 22:15:26 1997  Richard Henderson  <rth@tamu.edu>
+
+	Since sigset_t no longer fits in a register, we can't pass in the
+	thread's initial mask so easily.  Take this opportunity to simplify
+	the clone implementation by only accepting a single void* argument.
+
+	* linuxthreads/manager.c (__pthread_manager): Put thread vitals
+	in the thread struct instead of as arguments through clone.
+	(pthread_start_thread): Look for them there.
+	* linuxthreads/internals.h (struct _pthread): Add p_initial_fn,
+	p_initial_fn_arg, p_initial_mask.  Fix __pthread_manager proto.
+	* linuxthreads/pthread.c (pthread_initialize_manager): Revise
+	clone invocation.
