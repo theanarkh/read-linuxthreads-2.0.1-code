@@ -29,7 +29,7 @@ static inline void suspend(pthread_t self)
   // 清除对应的信号掩码，即可以处理该信号了
   sigdelset(&mask, PTHREAD_SIG_RESTART); /* Unblock the restart signal */
   do {
-    // 挂起直到指定的信号发生
+    // 挂起直到指定的被restart信号发生
     sigsuspend(&mask);                   /* Wait for signal */
   } while (self->p_signal != PTHREAD_SIG_RESTART);
 }

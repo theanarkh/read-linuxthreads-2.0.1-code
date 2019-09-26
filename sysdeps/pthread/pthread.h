@@ -90,7 +90,11 @@ enum
   PTHREAD_SCOPE_SYSTEM,
   PTHREAD_SCOPE_PROCESS
 };
-
+/*
+struct sched_param {
+	int sched_priority;
+};
+*/
 typedef struct
 {
   int detachstate;

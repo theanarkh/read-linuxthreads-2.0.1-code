@@ -176,6 +176,7 @@ static int pthread_initialize_manager(void)
   int manager_pipe[2];
 
   /* Setup stack for thread manager */
+  // 在堆上分配一块内存用于manager线程的栈
   __pthread_manager_thread_bos = malloc(THREAD_MANAGER_STACK_SIZE);
   if (__pthread_manager_thread_bos == NULL) return -1;
   // limit
@@ -189,6 +190,7 @@ static int pthread_initialize_manager(void)
   __pthread_manager_request = manager_pipe[1]; /* writing end */
   __pthread_manager_reader = manager_pipe[0]; /* reading end */
   /* Start the thread manager */
+  // 新建一个manager线程,manager_pipe是__thread_manager函数的入参
   if (__clone(__pthread_manager,
 	      __pthread_manager_thread_tos,
 	      CLONE_VM | CLONE_FS | CLONE_FILES | CLONE_SIGHAND,
@@ -209,7 +211,7 @@ int pthread_create(pthread_t *thread, const pthread_attr_t *attr,
 {
   pthread_t self = thread_self();
   struct pthread_request request;
-  // 还没执行过pthread_initialize_manager则执行
+  // 还没执行过pthread_initialize_manager则执行,用于初始化manager线程
   if (__pthread_manager_request < 0) {
     if (pthread_initialize_manager() < 0) return EAGAIN;
   }
@@ -219,10 +221,12 @@ int pthread_create(pthread_t *thread, const pthread_attr_t *attr,
   request.req_args.create.attr = attr;
   request.req_args.create.fn = start_routine;
   request.req_args.create.arg = arg;
+  // 获取当前线程的信号掩码
   sigprocmask(SIG_SETMASK, (const sigset_t *) NULL,
               &request.req_args.create.mask);
-  // 通过管道写入，完成和manager通信
+  // 通过管道写入，通知manager线程，新建一个线程
   __libc_write(__pthread_manager_request, (char *) &request, sizeof(request));
+  // 挂起
   suspend(self);
   if (self->p_retcode == 0) *thread = (pthread_t) self->p_retval;
   return self->p_retcode;
@@ -241,7 +245,7 @@ int pthread_equal(pthread_t thread1, pthread_t thread2)
 }
 
 /* Thread scheduling */
-
+// 设置线程调度策略
 int pthread_setschedparam(pthread_t target_thread, int policy,
                           const struct sched_param *param)
 {
@@ -262,12 +266,12 @@ int pthread_getschedparam(pthread_t target_thread, int *policy,
 }
 
 /* Process-wide exit() request */
-
+//
 static void pthread_exit_process(int retcode, void *arg)
 {
   struct pthread_request request;
   pthread_t self = thread_self();
-
+  // 管道写端，通知manager线程
   if (__pthread_manager_request >= 0) {
     request.req_thread = self;
     request.req_kind = REQ_PROCESS_EXIT;
@@ -374,7 +378,7 @@ weak_alias (__pthread_message, pthread_message)
 
 
 #ifndef PIC
-/* We need a hook to force the cancelation wrappers to be linked in when
+/* We need a suspendhook to force the cancelation wrappers to be linked in when
    static libpthread is used.  */
 extern const int __pthread_provide_wrappers;
 static const int *const __pthread_require_wrappers =

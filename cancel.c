@@ -28,13 +28,14 @@ int pthread_setcancelstate(int state, int * oldstate)
   if (oldstate != NULL) *oldstate = self->p_cancelstate;
   // 设置新的状态
   self->p_cancelstate = state;
+  // 判断线程是否被取消了，并且当前被设置成可取消状态，并且是需要马上处理的
   if (self->p_canceled &&
       self->p_cancelstate == PTHREAD_CANCEL_ENABLE &&
       self->p_canceltype == PTHREAD_CANCEL_ASYNCHRONOUS)
     pthread_exit(PTHREAD_CANCELED);
   return 0;
 }
-
+// 同上
 int pthread_setcanceltype(int type, int * oldtype)
 {
   pthread_t self = thread_self();
@@ -59,10 +60,11 @@ int pthread_cancel(pthread_t thread)
 void pthread_testcancel(void)
 {
   pthread_t self = thread_self();
+  // 判断线程是不是已经被取消，并且是可取消的，则退出
   if (self->p_canceled && self->p_cancelstate == PTHREAD_CANCEL_ENABLE)
     pthread_exit(PTHREAD_CANCELED);
 }
-
+// 链表中新增一个clean函数
 void _pthread_cleanup_push(struct _pthread_cleanup_buffer * buffer,
 			   void (*routine)(void *), void * arg)
 {
@@ -72,7 +74,7 @@ void _pthread_cleanup_push(struct _pthread_cleanup_buffer * buffer,
   buffer->prev = self->p_cleanup;
   self->p_cleanup = buffer;
 }
-
+// 删除一个clean节点，execute判断是否需要执行
 void _pthread_cleanup_pop(struct _pthread_cleanup_buffer * buffer,
 			  int execute)
 {
@@ -105,7 +107,7 @@ void _pthread_cleanup_pop_restore(struct _pthread_cleanup_buffer * buffer,
       self->p_canceltype == PTHREAD_CANCEL_ASYNCHRONOUS)
     pthread_exit(PTHREAD_CANCELED);
 }
-
+// 线程退出的时候(pthread_exit)调用执行clean链表的节点
 void __pthread_perform_cleanup(void)
 {
   pthread_t self = thread_self();

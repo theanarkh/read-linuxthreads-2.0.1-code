@@ -25,24 +25,30 @@ int pthread_sigmask(int how, const sigset_t * newmask, sigset_t * oldmask)
   mask = *newmask;
   /* Don't allow PTHREAD_SIG_RESTART to be unmasked.
      Don't allow PTHREAD_SIG_CANCEL to be masked. */
+  // 做一些拦截处理，
   switch(how) {
   case SIG_SETMASK:
+    // 需要屏蔽restart信号
     sigaddset(&mask, PTHREAD_SIG_RESTART);
+    // 不能屏蔽cancel信号
     sigdelset(&mask, PTHREAD_SIG_CANCEL);
     break;
   case SIG_BLOCK:
+    // 不能屏蔽cancel
     sigdelset(&mask, PTHREAD_SIG_CANCEL);
     break;
   case SIG_UNBLOCK:
+    // 需要屏蔽restart
     sigdelset(&mask, PTHREAD_SIG_RESTART);
     break;
   }
+  // 调系统函数
   if (sigprocmask(how, &mask, oldmask) == -1)
     return errno;
   else
     return 0;
 }
-
+// 给线程发信号，即给进程发信号
 int pthread_kill(pthread_t thread, int signo)
 {
   if (kill(thread->p_pid, signo) == -1)

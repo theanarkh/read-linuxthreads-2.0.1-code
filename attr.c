@@ -17,7 +17,7 @@
 #include <unistd.h>
 #include "pthread.h"
 #include "internals.h"
-
+// 初始化线程属性结构体
 int pthread_attr_init(pthread_attr_t *attr)
 {
   attr->detachstate = PTHREAD_CREATE_JOINABLE;
@@ -32,7 +32,7 @@ int pthread_attr_destroy(pthread_attr_t *attr)
 {
   return 0;
 }
-
+// 设置detach状态
 int pthread_attr_setdetachstate(pthread_attr_t *attr, int detachstate)
 {
   if (detachstate < PTHREAD_CREATE_JOINABLE ||
@@ -47,10 +47,11 @@ int pthread_attr_getdetachstate(const pthread_attr_t *attr, int *detachstate)
   *detachstate = attr->detachstate;
   return 0;
 }
-
+// 设置调度优先级的属性
 int pthread_attr_setschedparam(pthread_attr_t *attr,
                                const struct sched_param *param)
 {
+  // 由系统提供的最大和最小优先级
   int max_prio = sched_get_priority_max(attr->schedpolicy);
   int min_prio = sched_get_priority_min(attr->schedpolicy);
 
@@ -71,6 +72,7 @@ int pthread_attr_setschedpolicy(pthread_attr_t *attr, int policy)
 {
   if (policy != SCHED_OTHER && policy != SCHED_FIFO && policy != SCHED_RR)
     return EINVAL;
+  // SCHED_OTHER是分时调度，设置成非分时调度需要是超级用户
   if (policy != SCHED_OTHER && geteuid() != 0)
     return ENOTSUP;
   attr->schedpolicy = policy;
@@ -82,7 +84,7 @@ int pthread_attr_getschedpolicy(const pthread_attr_t *attr, int *policy)
   *policy = attr->schedpolicy;
   return 0;
 }
-
+// 调度策略来源于继承还是显示设置的
 int pthread_attr_setinheritsched(pthread_attr_t *attr, int inherit)
 {
   if (inherit != PTHREAD_INHERIT_SCHED && inherit != PTHREAD_EXPLICIT_SCHED)
@@ -96,7 +98,7 @@ int pthread_attr_getinheritsched(const pthread_attr_t *attr, int *inherit)
   *inherit = attr->inheritsched;
   return 0;
 }
-
+// 优先级的有效范围，PTHREAD_SCOPE_SYSTEM是和系统所有线程竞争，否则是和本进程内的其他线程竞争
 int pthread_attr_setscope(pthread_attr_t *attr, int scope)
 {
   switch (scope) {
