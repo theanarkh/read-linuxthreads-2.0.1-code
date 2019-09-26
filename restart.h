@@ -46,6 +46,7 @@ static inline void suspend_with_cancellation(pthread_t self)
   // 直接调用返回0，从siglongjump回来返回非0
   if (sigsetjmp(jmpbuf, 0) == 0) {
     self->p_cancel_jmp = &jmpbuf;
+    // 已经被取消并且是可取消的则直接返回，否则挂起等待唤醒
     if (! (self->p_canceled && self->p_cancelstate == PTHREAD_CANCEL_ENABLE)) {
       do {
         sigsuspend(&mask);               /* Wait for a signal */
@@ -53,7 +54,7 @@ static inline void suspend_with_cancellation(pthread_t self)
     }
     self->p_cancel_jmp = NULL;
   } else {
-    // 重新设置信号掩码
+    // 重新设置信号掩码,屏幕restart信号
     sigaddset(&mask, PTHREAD_SIG_RESTART); /* Reblock the restart signal */
     sigprocmask(SIG_SETMASK, &mask, NULL);
   }

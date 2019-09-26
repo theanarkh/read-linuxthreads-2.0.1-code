@@ -22,6 +22,7 @@
 #include "spinlock.h"
 #include "restart.h"
 
+// 线程退出
 void pthread_exit(void * retval)
 {
   pthread_t self = thread_self();
@@ -30,27 +31,36 @@ void pthread_exit(void * retval)
 
   /* Reset the cancellation flag to avoid looping if the cleanup handlers
      contain cancellation points */
+  // 设置成0，避免其他函数里判断是cancel状态，然后再调pthread_exit函数
   self->p_canceled = 0;
   /* Call cleanup functions and destroy the thread-specific data */
+  // 执行clean节点的函数
   __pthread_perform_cleanup();
+  // 遍历pthread_keys数组，销毁线程中的specifics数据
   __pthread_destroy_specifics();
   /* Store return value */
   acquire(&self->p_spinlock);
+  // 退出值
   self->p_retval = retval;
   /* Say that we've terminated */
+  // 已终止
   self->p_terminated = 1;
   /* See if someone is joining on us */
+  // 判断有没有其他线程在等待该线程退出
   joining = self->p_joining;
   release(&self->p_spinlock);
   /* Restart joining thread if any */
+  // 唤醒他
   if (joining != NULL) restart(joining);
   /* If this is the initial thread, block until all threads have terminated.
      If another thread calls exit, we'll be terminated from our signal
      handler. */
+  // 主线程退出，通知manage线程
   if (self == __pthread_main_thread && __pthread_manager_request >= 0) {
     request.req_thread = self;
     request.req_kind = REQ_MAIN_THREAD_EXIT;
     __libc_write(__pthread_manager_request, (char *)&request, sizeof(request));
+    // 挂起等待唤醒
     suspend(self);
   }
   /* Exit the process (but don't flush stdio streams, and don't run
@@ -72,7 +82,7 @@ int pthread_join(pthread_t th, void ** thread_return)
     return EINVAL;
   }
   /* If not terminated yet, suspend ourselves. */
-  // 线程还在运行
+  // join的线程还在运行，则需要等待
   if (! th->p_terminated) {
     th->p_joining = self;
     release(&th->p_spinlock);
@@ -90,7 +100,7 @@ int pthread_join(pthread_t th, void ** thread_return)
   if (thread_return != NULL) *thread_return = th->p_retval;
   release(&th->p_spinlock);
   /* Send notification to thread manager */
-  // 管道的写端
+  // 管道的写端，join的线程已经退出，通知manage线程本线程也可以退出了
   if (__pthread_manager_request >= 0) {
     // 发送线程结束通知到给manager线程
     request.req_thread = self;
@@ -114,15 +124,18 @@ int pthread_detach(pthread_t th)
     return EINVAL;
   }
   /* If already joining, don't do anything. */
+  // 有线程join了该线程，不能detach
   if (th->p_joining != NULL) {
     release(&th->p_spinlock);
     return 0;
   }
   /* Mark as detached */
+  // 标记已经detach
   th->p_detached = 1;
   terminated = th->p_terminated;
   release(&th->p_spinlock);
   /* If already terminated, notify thread manager to reclaim resources */
+  // 线程已经退出了，通知manager,__pthread_manager_request是管道写端
   if (terminated && __pthread_manager_request >= 0) {
     request.req_thread = thread_self();
     request.req_kind = REQ_FREE;
