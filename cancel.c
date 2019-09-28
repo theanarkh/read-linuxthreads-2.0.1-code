@@ -19,6 +19,14 @@
 #include "internals.h"
 #include "restart.h"
 
+/*
+ 修改线程的可取消属性。有一个取消点
+ 取消状态分为可取消，不可取消
+    不可取消的时候，收到取消信号，忽略
+    可取消的时候，收到取消信号的时候，根据取消类型做处理。
+      立即处理
+      不立刻处理，到下一个取消点，判定线程的状态的取消类型再处理
+ */
 int pthread_setcancelstate(int state, int * oldstate)
 {
   pthread_t self = thread_self();
@@ -28,14 +36,14 @@ int pthread_setcancelstate(int state, int * oldstate)
   if (oldstate != NULL) *oldstate = self->p_cancelstate;
   // 设置新的状态
   self->p_cancelstate = state;
-  // 判断线程是否被取消了，并且当前被设置成可取消状态，并且是需要马上处理的
+  // 判断线程是否被取消了，并且当前被设置成可取消状态，并且是需要马上处理的,则直接退出
   if (self->p_canceled &&
       self->p_cancelstate == PTHREAD_CANCEL_ENABLE &&
       self->p_canceltype == PTHREAD_CANCEL_ASYNCHRONOUS)
     pthread_exit(PTHREAD_CANCELED);
   return 0;
 }
-// 同上
+// 见上一个函数
 int pthread_setcanceltype(int type, int * oldtype)
 {
   pthread_t self = thread_self();
@@ -82,7 +90,7 @@ void _pthread_cleanup_pop(struct _pthread_cleanup_buffer * buffer,
   if (execute) buffer->routine(buffer->arg);
   self->p_cleanup = buffer->prev;
 }
-
+// 新增一个clean节点，保存旧的取消类型，设置新的取消类型为PTHREAD_CANCEL_DEFERRED
 void _pthread_cleanup_push_defer(struct _pthread_cleanup_buffer * buffer,
 				 void (*routine)(void *), void * arg)
 {
@@ -95,6 +103,7 @@ void _pthread_cleanup_push_defer(struct _pthread_cleanup_buffer * buffer,
   self->p_cleanup = buffer;
 }
 
+// 和上面的函数配套。删除一个clean节点，execute控制是否需要执行删除的这个节点，恢复线程的取消类型，是一个有取消点的函数
 void _pthread_cleanup_pop_restore(struct _pthread_cleanup_buffer * buffer,
 				  int execute)
 {

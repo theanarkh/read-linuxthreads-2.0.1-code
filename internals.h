@@ -25,48 +25,72 @@
 /* The type of thread descriptors */
 
 struct _pthread {
+  // 双向链表中的前后指针
   pthread_t p_nextlive, p_prevlive; /* Double chaining of active threads */
+  // 单链表中的next指针
   pthread_t p_nextwaiting;      /* Next element in the queue holding the thr */
+  // 线程对应的进程id
   int p_pid;                    /* PID of Unix process */
+  // 自旋锁
   int p_spinlock;               /* Spinlock for synchronized accesses */
+  // 最后一次收到的信号
   int p_signal;                 /* last signal received */
+  // 记录sigsetjmp返回的堆栈信息，用于siglongjmp的时候跳回到对应的地方
   sigjmp_buf * p_signal_jmp;    /* where to siglongjmp on a signal or NULL */
   sigjmp_buf * p_cancel_jmp;    /* where to siglongjmp on a cancel or NULL */
+  // 标记线程是否退出了，pthread_exit中设置
   char p_terminated;            /* true if terminated e.g. by pthread_exit */
+  // 线程是否已脱离，脱离线程退出后，资源会立刻回收
   char p_detached;              /* true if detached */
   char p_exited;                /* true if the assoc. process terminated */
+  // 
   void * p_retval;              /* placeholder for return value */
   int p_retcode;                /* placeholder for return code */
+  // 谁join了该线程
   pthread_t p_joining;          /* thread joining on that thread or NULL */
+  // clean链表，用于pthread_exit里执行
   struct _pthread_cleanup_buffer * p_cleanup; /* cleanup functions */
+  // 取消状态和类型
   char p_cancelstate;           /* cancellation state */
   char p_canceltype;            /* cancellation type (deferred/async) */
+  // 在pthread_cancel设置。标记是否被取消了
   char p_canceled;              /* cancellation request pending */
+  // 最后一个系统调用的返回值，和c语言的errno类似
   int p_errno;                  /* error returned by last system call */
   int p_h_errno;                /* error returned by last netdb function */
+  // 线程的执行函数
   void *(*p_initial_fn)(void *); /* function to call on thread start */
+  // 执行函数的参数
   void *p_initial_fn_arg;	/* argument to give that function */
+  // 线程被状态的时候，设置的信号掩码,值继承于创建线程的那个线程，即调用了pthread_create的函数
   sigset_t p_initial_mask;	/* signal mask on thread start */
+  // 数据存储
   void * p_specific[PTHREAD_KEYS_MAX]; /* thread-specific data */
 };
 
 /* The type of messages sent to the thread manager thread */
-
+// 线程和manger的通信协议
 struct pthread_request {
+  // 发送该数据的线程
   pthread_t req_thread;         /* Thread doing the request */
+  // 消息类型
   enum {                        /* Request kind */
     REQ_CREATE, REQ_FREE, REQ_PROCESS_EXIT, REQ_MAIN_THREAD_EXIT
   } req_kind;
+  // 不同类型的消息对应不同的字段 
   union {                       /* Arguments for request */
+    // 创建线程的数据格式
     struct {                    /* For REQ_CREATE: */
       const pthread_attr_t * attr; /* thread attributes */
       void * (*fn)(void *);     /*   start function */
       void * arg;               /*   argument to start function */
       sigset_t mask;            /*   signal mask */
     } create;
+    // 销毁线程
     struct {                    /* For REQ_FREE: */
       pthread_t thread;         /*   ID of thread to free */
     } free;
+    // 线程退出
     struct {                    /* For REQ_PROCESS_EXIT: */
       int code;                 /*   exit status */
     } exit;

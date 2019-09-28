@@ -51,7 +51,7 @@ static int terminated_children = 0;
 
 /* Flag set when the initial thread is blocked on pthread_exit waiting
    for all other threads to terminate */
-
+// 标记主线程是否已经调用了pthread_exit，然后在等待其他子线程退出
 static int main_thread_exiting = 0;
 
 /* Forward declarations */
@@ -93,8 +93,10 @@ int __pthread_manager(void *arg)
     FD_ZERO(&readfds);
     // 置某位为1，位数由reqfd算得
     FD_SET(reqfd, &readfds);
+    // 阻塞的超时时间
     timeout.tv_sec = 2;
     timeout.tv_usec = 0;
+    // 定时阻塞等待管道有数据可读
     n = __select(FD_SETSIZE, &readfds, NULL, NULL, &timeout);
     /* Check for termination of the main thread */
     if (getppid() == 1) {
@@ -107,7 +109,9 @@ int __pthread_manager(void *arg)
       pthread_reap_children();
     }
     /* Read and execute request */
+    // 管道有数据可读
     if (n == 1 && FD_ISSET(reqfd, &readfds)) {
+      // 读出来放到request
       n = __libc_read(reqfd, (char *)&request, sizeof(request));
       ASSERT(n == sizeof(request));
       switch(request.req_kind) {
@@ -129,7 +133,9 @@ int __pthread_manager(void *arg)
                             request.req_args.exit.code);
         break;
       case REQ_MAIN_THREAD_EXIT:
+        // 标记主线程退出
         main_thread_exiting = 1;
+        // 其他线程已经退出了，只有主线程了，唤醒主线程，主线程也退出，见pthread_exit，如果还有子线程没退出则主线程不能退出
         if (__pthread_main_thread->p_nextlive == __pthread_main_thread) {
           restart(__pthread_main_thread);
           return 0;
@@ -164,9 +170,10 @@ static int pthread_grow_stack_segments(void)
 }
 
 /* Process creation */
-
+// 传给clone函数的参数
 static int pthread_start_thread(void *arg)
-{
+{ 
+  // 新建的线程
   pthread_t self = (pthread_t) arg;
   void * outcome;
   /* Initialize special thread_self processing, if any.  */
@@ -175,17 +182,21 @@ static int pthread_start_thread(void *arg)
 #endif
   /* Make sure our pid field is initialized, just in case we get there
      before our father has initialized it. */
+  // 记录线程对应进程的id
   self->p_pid = getpid();
   /* Initial signal mask is that of the creating thread. (Otherwise,
      we'd just inherit the mask of the thread manager.) */
+  // 设置线程的信号掩码，值继承于父线程
   sigprocmask(SIG_SETMASK, &self->p_initial_mask, NULL);
   /* Run the thread code */
+  // 开始执行线程的主函数
   outcome = self->p_initial_fn(self->p_initial_fn_arg);
   /* Exit with the given return value */
+  // 执行完退出
   pthread_exit(outcome);
   return 0;
 }
-
+// pthread_create发送信号给manager，manager调该函数创建线程
 static int pthread_handle_create(pthread_t *thread, const pthread_attr_t *attr,
                                  void * (*start_routine)(void *), void *arg,
                                  sigset_t mask, int father_pid)
@@ -205,7 +216,9 @@ static int pthread_handle_create(pthread_t *thread, const pthread_attr_t *attr,
       if (stack_segments[sseg] == 0) break;
       sseg++;
     }
+    // 标记已使用
     stack_segments[sseg] = 1;
+    // 存储线程元数据的地方
     new_thread = THREAD_SEG(sseg);
     /* Allocate space for stack and thread descriptor. */
     if (mmap((caddr_t)((char *)(new_thread+1) - INITIAL_STACK_SIZE),
@@ -267,6 +280,7 @@ static int pthread_handle_create(pthread_t *thread, const pthread_attr_t *attr,
     }
   }
   /* Insert new thread in doubly linked list of active threads */
+  // 插入进程下的线程列表
   new_thread->p_prevlive = __pthread_main_thread;
   new_thread->p_nextlive = __pthread_main_thread->p_nextlive;
   __pthread_main_thread->p_nextlive->p_prevlive = new_thread;
@@ -303,12 +317,14 @@ static void pthread_exited(pid_t pid)
   for (th = __pthread_main_thread->p_nextlive;
        th != __pthread_main_thread;
        th = th->p_nextlive) {
+    // 从双向链表中删除pid对应的接点
     if (th->p_pid == pid) {
       /* Remove thread from list of active threads */
       th->p_nextlive->p_prevlive = th->p_prevlive;
       th->p_prevlive->p_nextlive = th->p_nextlive;
       /* Mark thread as exited, and if detached, free its resources */
       acquire(&th->p_spinlock);
+      // 标记退回
       th->p_exited = 1;
       detached = th->p_detached;
       release(&th->p_spinlock);
@@ -318,6 +334,7 @@ static void pthread_exited(pid_t pid)
   }
   /* If all threads have exited and the main thread is pending on a
      pthread_exit, wake up the main thread and terminate ourselves. */
+  // 只剩下父线程，唤醒主线程
   if (main_thread_exiting &&
       __pthread_main_thread->p_nextlive == __pthread_main_thread) {
     restart(__pthread_main_thread);

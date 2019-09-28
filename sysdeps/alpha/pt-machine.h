@@ -62,7 +62,7 @@ register char *stack_pointer __asm__("$30");
 
 
 /* Return the thread descriptor for the current thread.  */
-#define THREAD_SELF						\
+#define sTHREAD_SELF						\
 {								\
   register pthread_t __self __asm__("$0");			\
   __asm__ ("call_pal %1" : "=r"(__self) : "i"(PAL_rduniq));	\

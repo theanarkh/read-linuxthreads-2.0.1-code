@@ -31,6 +31,7 @@ int pthread_cond_init(pthread_cond_t *cond,
                       const pthread_condattr_t *cond_attr)
 {
   cond->c_spinlock = 0;
+  // 初始化队列
   queue_init(&cond->c_waiting);
   return 0;
 }
@@ -61,9 +62,11 @@ int pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex)
   // 被唤醒后重新获取互斥锁
   pthread_mutex_lock(mutex);
   /* This is a cancellation point */
+  // 取消点
   if (self->p_canceled && self->p_cancelstate == PTHREAD_CANCEL_ENABLE) {
     /* Remove ourselves from the waiting queue if we're still on it */
     acquire(&cond->c_spinlock);
+    // 线程准备退出，从条件阻塞队列中移除
     remove_from_queue(&cond->c_waiting, self);
     release(&cond->c_spinlock);
     pthread_exit(PTHREAD_CANCELED);
@@ -97,12 +100,15 @@ pthread_cond_timedwait_relative(pthread_cond_t *cond,
       retsleep = -1;
     } else {
       /* Unblock the restart signal */
+      // 移除对restart信号的阻塞
       sigemptyset(&unblock);
       sigaddset(&unblock, PTHREAD_SIG_RESTART);
       sigprocmask(SIG_UNBLOCK, &unblock, &initial_mask);
       /* Sleep for the required duration */
+      // 阻塞一段时间
       retsleep = __libc_nanosleep(reltime, NULL);
       /* Block the restart signal again */
+      // 恢复需要阻塞的信号集
       sigprocmask(SIG_SETMASK, &initial_mask, NULL);
     }
   } else {
@@ -123,10 +129,12 @@ pthread_cond_timedwait_relative(pthread_cond_t *cond,
     pthread_exit(PTHREAD_CANCELED);
   }
   /* If not signaled: also remove ourselves and return an error code */
+  // 没有收到信号，移出阻塞队列，
   if (self->p_signal == 0) {
     remove_from_queue(&cond->c_waiting, self);
     release(&cond->c_spinlock);
     pthread_mutex_lock(mutex);
+    // 等于0说明是从sleep中返回
     return retsleep == 0 ? ETIMEDOUT : EINTR;
   }
   /* Otherwise, return normally */
