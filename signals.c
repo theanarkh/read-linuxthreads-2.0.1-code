@@ -67,7 +67,9 @@ int sigwait(const sigset_t * set, int * sig)
 
   /* Get ready to block all signals except those in set
      and the cancellation signal */
+  // 全1，阻塞全部信号
   sigfillset(&mask);
+  // 不屏蔽取消信号
   sigdelset(&mask, PTHREAD_SIG_CANCEL);
   /* Signals in set are assumed blocked on entrance */
   /* Install our signal handler on all signals in set,
@@ -76,8 +78,10 @@ int sigwait(const sigset_t * set, int * sig)
     if (sigismember(set, s) && s != PTHREAD_SIG_CANCEL) {
       sigdelset(&mask, s);
       action.sa_handler = __pthread_sighandler;
+      // 在信号处理函数里阻塞所有的信号
       sigfillset(&action.sa_mask); /* block all signals in the handler */
       action.sa_flags = 0;
+      // 注册该信号对应的handler
       sigaction(s, &action, &(saved_signals[s]));
     }
   }
