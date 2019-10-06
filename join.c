@@ -25,6 +25,7 @@
 // 线程退出
 void pthread_exit(void * retval)
 {
+  // 获取当前线程的结构体
   pthread_t self = thread_self();
   pthread_t joining;
   struct pthread_request request;
@@ -39,8 +40,9 @@ void pthread_exit(void * retval)
   // 遍历pthread_keys数组，销毁线程中的specifics数据
   __pthread_destroy_specifics();
   /* Store return value */
+  // 加锁
   acquire(&self->p_spinlock);
-  // 退出值
+  // 退出值,可以在join中返回给其他线程
   self->p_retval = retval;
   /* Say that we've terminated */
   // 已终止
@@ -55,13 +57,13 @@ void pthread_exit(void * retval)
   /* If this is the initial thread, block until all threads have terminated.
      If another thread calls exit, we'll be terminated from our signal
      handler. */
-  // 主线程退出，通知manage线程，主线程即主进程
+  // 如果是主线程退出，通知manage线程，如果是一般线程则直接执行exit退出
   if (self == __pthread_main_thread && __pthread_manager_request >= 0) {
     request.req_thread = self;
     request.req_kind = REQ_MAIN_THREAD_EXIT;
     // 写入管道
     __libc_write(__pthread_manager_request, (char *)&request, sizeof(request));
-    // 挂起等待唤醒，全部子线程都退出后了才唤醒主线程，然后主线程也退出
+    // 挂起等待唤醒，全部子线程都退出后了才唤醒主线程，然后主线程也退出,见manager.c的__pthread_manager函数
     suspend(self);
   }
   /* Exit the process (but don't flush stdio streams, and don't run

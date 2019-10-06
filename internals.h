@@ -69,7 +69,7 @@ struct _pthread {
 };
 
 /* The type of messages sent to the thread manager thread */
-// 线程和manger的通信协议
+// 线程和manger线程的通信协议
 struct pthread_request {
   // 发送该数据的线程
   pthread_t req_thread;         /* Thread doing the request */
@@ -105,11 +105,11 @@ struct pthread_request {
 #define PTHREAD_SIG_CANCEL SIGUSR2
 
 /* Descriptor of the initial thread */
-
+// 主线程，即main函数对应的线程
 extern struct _pthread __pthread_initial_thread;
 
 /* Descriptor of the manager thread */
-
+// manager线程，管理多个线程的线程
 extern struct _pthread __pthread_manager_thread;
 
 /* Descriptor of the main thread */
@@ -125,11 +125,11 @@ extern char *__pthread_initial_thread_bos;
 
 /* File descriptor for sending requests to the thread manager.
    Initially -1, meaning that pthread_initialize must be called. */
-
+// 管道的写端
 extern int __pthread_manager_request;
 
 /* Other end of the pipe for sending requests to the thread manager. */
-
+// 管道的读端
 extern int pthread_manager_reader;
 
 /* Limits of the thread manager stack. */
@@ -145,6 +145,7 @@ extern int __pthread_exit_requested, __pthread_exit_code;
 
 /* The page size we can get from the system.  This should likely not be
    changed by the machine file but, you never know.  */
+// 页大小
 #ifndef PAGE_SIZE
 #define PAGE_SIZE  (sysconf (_SC_PAGE_SIZE))
 #endif

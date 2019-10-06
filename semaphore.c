@@ -65,7 +65,7 @@ int sem_init(sem_t *sem, int pshared, unsigned int value)
     errno = ENOSYS;
     return -1;
   }
-  // 记录资源数
+  // 记录资源数,N=>2N+1
   sem->sem_status = ((long)value << 1) + 1;
   return 0;
 }
