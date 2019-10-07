@@ -45,6 +45,7 @@ struct _pthread {
   char p_exited;                /* true if the assoc. process terminated */
   // 
   void * p_retval;              /* placeholder for return value */
+  // 创建线程时的返回值，由pthread_handle_create返回
   int p_retcode;                /* placeholder for return code */
   // 谁join了该线程
   pthread_t p_joining;          /* thread joining on that thread or NULL */

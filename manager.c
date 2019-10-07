@@ -83,7 +83,7 @@ int __pthread_manager(void *arg)
   /* Block all signals except PTHREAD_SIG_RESTART */
   // 初始化为全1
   sigfillset(&mask);
-  // 设置某一位为0
+  // 设置某一位为0,这里设置可以处理restart信号
   sigdelset(&mask, PTHREAD_SIG_RESTART);
   // 设置进程的信号掩码
   sigprocmask(SIG_SETMASK, &mask, NULL);
@@ -91,7 +91,7 @@ int __pthread_manager(void *arg)
   while(1) {
     // 清0
     FD_ZERO(&readfds);
-    // 置某位为1，位数由reqfd算得
+    // 置某位为1，位数由reqfd算得,这里是管道读端的文件描述符
     FD_SET(reqfd, &readfds);
     // 阻塞的超时时间
     timeout.tv_sec = 2;
@@ -99,7 +99,9 @@ int __pthread_manager(void *arg)
     // 定时阻塞等待管道有数据可读
     n = __select(FD_SETSIZE, &readfds, NULL, NULL, &timeout);
     /* Check for termination of the main thread */
+    // 父进程id为1说明主进程（线程）已经退出，子进程被init（pid=1）进程接管了，
     if (getppid() == 1) {
+      // 0说明不需要给主线程发，因为他已经退出了
       pthread_kill_all_threads(SIGKILL, 0);
       return 0;
     }
@@ -115,6 +117,7 @@ int __pthread_manager(void *arg)
       n = __libc_read(reqfd, (char *)&request, sizeof(request));
       ASSERT(n == sizeof(request));
       switch(request.req_kind) {
+      // 创建线程
       case REQ_CREATE:
         request.req_thread->p_retcode =
           pthread_handle_create((pthread_t *) &request.req_thread->p_retval,
@@ -123,6 +126,7 @@ int __pthread_manager(void *arg)
                                 request.req_args.create.arg,
                                 request.req_args.create.mask,
                                 request.req_thread->p_pid);
+        // 唤醒父线程
         restart(request.req_thread);
         break;
       case REQ_FREE:
@@ -280,7 +284,7 @@ static int pthread_handle_create(pthread_t *thread, const pthread_attr_t *attr,
     }
   }
   /* Insert new thread in doubly linked list of active threads */
-  // 插入进程下的线程列表
+  // 头插法，插入主线程和其他线程之间，
   new_thread->p_prevlive = __pthread_main_thread;
   new_thread->p_nextlive = __pthread_main_thread->p_nextlive;
   __pthread_main_thread->p_nextlive->p_prevlive = new_thread;
@@ -328,6 +332,7 @@ static void pthread_exited(pid_t pid)
       th->p_exited = 1;
       detached = th->p_detached;
       release(&th->p_spinlock);
+      // 回收资源
       if (detached) pthread_free(th);
       break;
     }
@@ -346,12 +351,15 @@ static void pthread_reap_children(void)
 {
   pid_t pid;
   int status;
-
+  // 判断是否有clone的子进程结束，如果没有直接返回
   while ((pid = __libc_waitpid(-1, &status, WNOHANG | __WCLONE)) > 0) {
+    // 该进程已经退出， 从链表中删除和回收他的资源
     pthread_exited(pid);
+    // 异常退出
     if (WIFSIGNALED(status)) {
       /* If a thread died due to a signal, send the same signal to
          all other threads, including the main thread. */
+      // 给所有线程发送信号
       pthread_kill_all_threads(WTERMSIG(status), 1);
       _exit(0);
     }
@@ -375,7 +383,7 @@ static void pthread_handle_free(pthread_t th)
 }
 
 /* Send a signal to all running threads */
-
+// 给所有线程发送信号，main_thread_also是否给主线程发
 static void pthread_kill_all_threads(int sig, int main_thread_also)
 {
   pthread_t th;
@@ -403,8 +411,10 @@ static void pthread_handle_exit(pthread_t issuing_thread, int exitcode)
   for (th = issuing_thread->p_nextlive;
        th != issuing_thread;
        th = th->p_nextlive) {
+    // 给其他线程发信号
     kill(th->p_pid, PTHREAD_SIG_CANCEL);
   }
+  // 唤醒线程
   restart(issuing_thread);
   _exit(0);
 }

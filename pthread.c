@@ -123,7 +123,7 @@ static void pthread_handle_sigcancel(int sig);
      (must do this very early, since the program could capture the signal
       mask with e.g. sigsetjmp before creating the first thread);
    - a regular function called from pthread_create when needed. */
-
+// 在main函数之前执行该函数
 void __pthread_initialize(void) __attribute__((constructor));
 
 void __pthread_initialize(void)
@@ -143,6 +143,7 @@ void __pthread_initialize(void)
     // 按STACK_SIZE大小对齐
     (char *)(((long)CURRENT_STACK_FRAME - 2 * STACK_SIZE) & ~(STACK_SIZE - 1));
   /* Update the descriptor for the initial thread. */
+  // 即main函数代表的主进程id
   __pthread_initial_thread.p_pid = getpid();
   /* If we have special thread_self processing, initialize that for the
      main thread now.  */
@@ -152,6 +153,7 @@ void __pthread_initialize(void)
   /* Setup signal handlers for the initial thread.
      Since signal handlers are shared between threads, these settings
      will be inherited by all other threads. */
+  // 为两个信号注册处理函数
   sa.sa_handler = __pthread_sighandler;
   sigemptyset(&sa.sa_mask);
   sa.sa_flags = SA_RESTART; /* does not matter for regular threads, but
@@ -162,12 +164,14 @@ void __pthread_initialize(void)
   sigaction(PTHREAD_SIG_CANCEL, &sa, NULL);
 
   /* Initially, block PTHREAD_SIG_RESTART. Will be unblocked on demand. */
+  // 屏蔽restart信号
   sigemptyset(&mask);
   sigaddset(&mask, PTHREAD_SIG_RESTART);
   sigprocmask(SIG_BLOCK, &mask, NULL);
   /* Register an exit function to kill all other threads. */
   /* Do it early so that user-registered atexit functions are called
      before pthread_exit_process. */
+  // 注册退出时执行的函数
   __on_exit(pthread_exit_process, NULL);
 }
 
@@ -226,8 +230,9 @@ int pthread_create(pthread_t *thread, const pthread_attr_t *attr,
               &request.req_args.create.mask);
   // 通过管道写入，通知manager线程，新建一个线程
   __libc_write(__pthread_manager_request, (char *) &request, sizeof(request));
-  // 挂起
+  // 挂起,等待manager唤醒
   suspend(self);
+  // 等于0说明创建成功，否则返回失败的错误码,p_retval在pthread_handle_create中设置
   if (self->p_retcode == 0) *thread = (pthread_t) self->p_retval;
   return self->p_retcode;
 }
@@ -266,7 +271,7 @@ int pthread_getschedparam(pthread_t target_thread, int *policy,
 }
 
 /* Process-wide exit() request */
-//
+// 杀死除了自己的其他线程,见manager中关于REQ_PROCESS_EXIT的处理
 static void pthread_exit_process(int retcode, void *arg)
 {
   struct pthread_request request;
@@ -287,31 +292,35 @@ static void pthread_exit_process(int retcode, void *arg)
    (for pthread_cond_timedwait). Also used in sigwait.
    For the thread manager thread, redirect the signal to
    pthread_manager_sighandler. */
-
+// 信号处理函数
 void __pthread_sighandler(int sig)
 {
   pthread_t self = thread_self();
   if (self == &__pthread_manager_thread) {
     __pthread_manager_sighandler(sig);
   } else {
+    // 记录收到的信号
     self->p_signal = sig;
+    // 可以直接跳回到调用处，即sigsetjump处
     if (self->p_signal_jmp != NULL) siglongjmp(*self->p_signal_jmp, 1);
   }
 }
 
 /* The handler for the CANCEL signal checks for cancellation
    (in asynchronous mode) and for process-wide exit and exec requests. */
-
+// 处理收获到的取消信号量。
 static void pthread_handle_sigcancel(int sig)
 {
   pthread_t self = thread_self();
   sigjmp_buf * jmpbuf;
-
+  // pthread_handle_exit=1说明是线程退出，在pthread_handle_exit中设置
   if (__pthread_exit_requested)
     _exit(__pthread_exit_code);
+  // 需要立刻退出的取消信号
   if (self->p_canceled && self->p_cancelstate == PTHREAD_CANCEL_ENABLE) {
     if (self->p_canceltype == PTHREAD_CANCEL_ASYNCHRONOUS)
       pthread_exit(PTHREAD_CANCELED);
+    // 跳回到sigsetjump
     jmpbuf = self->p_cancel_jmp;
     if (jmpbuf != NULL) {
       self->p_cancel_jmp = NULL;
@@ -325,7 +334,7 @@ static void pthread_handle_sigcancel(int sig)
    thread.
    Notice that we can't free the stack segments, as the forked thread
    may hold pointers into them. */
-
+// 主线程默认是main函数执行时的线程，这里重置当前线程为主线程
 void __pthread_reset_main_thread()
 {
   pthread_t self = thread_self();
@@ -334,25 +343,31 @@ void __pthread_reset_main_thread()
   free(__pthread_manager_thread_bos);
   __pthread_manager_thread_bos = __pthread_manager_thread_tos = NULL;
   /* Close the two ends of the pipe */
+  // 关闭管道的读写端
   __libc_close(__pthread_manager_request);
   __libc_close(__pthread_manager_reader);
   __pthread_manager_request = __pthread_manager_reader = -1;
   /* Update the pid of the main thread */
+  // 修改当前线程对应的进程pid
   self->p_pid = getpid();
   /* Make the forked thread the main thread */
+  // 设置当前线程为主线程 
   __pthread_main_thread = self;
+  // 链表中只有一个线程，就是自己
   self->p_nextlive = self;
   self->p_nextlive = self;
 }
 
 /* Process-wide exec() request */
-
+// 杀死除了自己之外的其他线程
 void __pthread_kill_other_threads_np(void)
 {
   /* Terminate all other threads and thread manager */
+  // 杀死其他线程
   pthread_exit_process(0, NULL);
   /* Make current thread the main thread in case the calling thread
      changes its mind, does not exec(), and creates new threads instead. */
+  // 使得自己为主线程
   __pthread_reset_main_thread();
 }
 weak_alias (__pthread_kill_other_threads_np, pthread_kill_other_threads_np)

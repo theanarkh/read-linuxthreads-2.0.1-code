@@ -24,8 +24,9 @@ struct handler_list {
   void (*handler)(void);
   struct handler_list * next;
 };
-
+// 用于互斥访问链表的互斥变量
 static pthread_mutex_t pthread_atfork_lock = PTHREAD_MUTEX_INITIALIZER;
+// 三个链表
 static struct handler_list * pthread_atfork_prepare = NULL;
 static struct handler_list * pthread_atfork_parent = NULL;
 static struct handler_list * pthread_atfork_child = NULL;
@@ -77,7 +78,8 @@ static inline void pthread_call_handlers(struct handler_list * list)
 }
 
 extern int __fork(void);
-
+// http://man7.org/linux/man-pages/man3/pthread_atfork.3.html
+// 劫持系统的fork
 int fork(void)
 {
   int pid;
@@ -88,6 +90,7 @@ int fork(void)
   child = pthread_atfork_child;
   parent = pthread_atfork_parent;
   pthread_mutex_unlock(&pthread_atfork_lock);
+  // 调fork之前调用函数列表
   pthread_call_handlers(prepare);
   pid = __fork();
   // 子进程
@@ -96,6 +99,7 @@ int fork(void)
     __fresetlockfiles();
     pthread_call_handlers(child);
   } else {
+    // 父进程
     pthread_call_handlers(parent);
   }
   return pid;

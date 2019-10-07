@@ -25,9 +25,11 @@ extern inline int
 testandset (int *spinlock)
 {
   int ret;
-
+  // spinlock的内容和1交换，返回spinlock的内容，原子操作
   __asm__ __volatile__("xchgl %0, %1"
+  // 输出，ret和spinlock交换后，ret保存的是spinlock的值，即这个函数设置spinlock的新值，返回spinlock的旧值
 	: "=r"(ret), "=m"(*spinlock)
+  // 输入
 	: "0"(1), "m"(*spinlock));
 
   return ret;
