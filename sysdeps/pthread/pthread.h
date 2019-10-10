@@ -50,13 +50,18 @@ struct _pthread_queue
 /* Mutexes (not abstract because of PTHREAD_MUTEX_INITIALIZER).  */
 typedef struct
 {
+  // 自旋锁
   int m_spinlock;		/* Spin lock to guarantee mutual exclusion.  */
+  // 用于递归加锁，即某个线程多次获取了该互斥变量。m_count记录了次数
   int m_count;			/* 0 if free, > 0 if taken.  */
+  // 记录谁获取了该互斥变量，在递归加锁的时候会使用这个字段
   pthread_t m_owner;		/* Owner of mutex (for recursive mutexes) */
+  // 互斥变量的类型，递归或非递归
   int m_kind;			/* Kind of mutex */
+  // 等待该互斥变量的线程队列
   struct _pthread_queue m_waiting; /* Threads waiting on this mutex.  */
 } pthread_mutex_t;
-
+// 初始化互斥变量，类型是递归或非递归
 #define PTHREAD_MUTEX_INITIALIZER \
   {0, 0, 0, PTHREAD_MUTEX_FAST_NP, {0, 0}}
 #define PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP \

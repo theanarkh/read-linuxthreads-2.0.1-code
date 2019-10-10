@@ -65,8 +65,10 @@ int __pthread_mutex_trylock(pthread_mutex_t * mutex)
       return 0;
     }
     break;
+  // 递归获取互斥变量
   case PTHREAD_MUTEX_RECURSIVE_NP:
     self = thread_self();
+    // 等于0则说明还没有被获取过，可以直接获取，或者已经被当前线程获取了，则次数加一
     if (mutex->m_count == 0 || mutex->m_owner == self) {
       mutex->m_count++;
       mutex->m_owner = self;
@@ -82,6 +84,7 @@ int __pthread_mutex_trylock(pthread_mutex_t * mutex)
 }
 weak_alias (__pthread_mutex_trylock, pthread_mutex_trylock)
 
+// 阻塞式获取互斥变量
 int __pthread_mutex_lock(pthread_mutex_t * mutex)
 {
   pthread_t self;
@@ -112,10 +115,10 @@ int __pthread_mutex_lock(pthread_mutex_t * mutex)
       return EINVAL;
     }
     /* Suspend ourselves, then try again */
-    // 把当前线程插入该互斥锁的等待队列
+    // 获取失败，需要阻塞，把当前线程插入该互斥锁的等待队列
     enqueue(&mutex->m_waiting, self);
     release(&mutex->m_spinlock);
-    // 挂起
+    // 挂起等待唤醒
     suspend(self); /* This is not a cancellation point */
   }
 }
@@ -141,7 +144,7 @@ int __pthread_mutex_unlock(pthread_mutex_t * mutex)
   default:
     return EINVAL;
   }
-  // 取出一个被阻塞的线程，唤醒他
+  // 取出一个被阻塞的线程（如果有的话），唤醒他
   th = dequeue(&mutex->m_waiting);
   release(&mutex->m_spinlock);
   if (th != NULL) restart(th);

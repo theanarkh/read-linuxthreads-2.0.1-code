@@ -61,7 +61,7 @@ static inline void suspend_with_cancellation(pthread_t self)
     }
     self->p_cancel_jmp = NULL;
   } else {
-    // 从siglongjmp返回的，重新设置信号掩码,屏蔽restart信号
+    // 从siglongjmp返回的，siglongjmp之前会清除self->p_cancel_jmp,重新设置信号掩码,屏蔽restart信号
     sigaddset(&mask, PTHREAD_SIG_RESTART); /* Reblock the restart signal */
     sigprocmask(SIG_SETMASK, &mask, NULL);
   }

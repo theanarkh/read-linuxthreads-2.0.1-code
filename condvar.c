@@ -57,7 +57,7 @@ int pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex)
   release(&cond->c_spinlock);
   // 释放互斥变量
   pthread_mutex_unlock(mutex);
-  // 挂起等待唤醒
+  // 挂起等待条件满足后被唤醒
   suspend_with_cancellation(self);
   // 被唤醒后重新获取互斥锁
   pthread_mutex_lock(mutex);
@@ -105,7 +105,12 @@ pthread_cond_timedwait_relative(pthread_cond_t *cond,
       sigaddset(&unblock, PTHREAD_SIG_RESTART);
       sigprocmask(SIG_UNBLOCK, &unblock, &initial_mask);
       /* Sleep for the required duration */
-      // 阻塞一段时间
+      /*
+       阻塞一段时间，如果时间到或者被信号唤醒则返回，
+       该函数使得线程进入TASK_INTERRUPTIBLE状态，该状态可以被信号唤醒。
+       0 时间到
+       -1 收到信号或失败，并设置errno。
+      */
       retsleep = __libc_nanosleep(reltime, NULL);
       /* Block the restart signal again */
       // 恢复需要阻塞的信号集
@@ -134,7 +139,7 @@ pthread_cond_timedwait_relative(pthread_cond_t *cond,
     remove_from_queue(&cond->c_waiting, self);
     release(&cond->c_spinlock);
     pthread_mutex_lock(mutex);
-    // 等于0说明是从sleep中返回
+    // 等于0说明是超时
     return retsleep == 0 ? ETIMEDOUT : EINTR;
   }
   /* Otherwise, return normally */

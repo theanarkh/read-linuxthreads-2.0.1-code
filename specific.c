@@ -107,8 +107,11 @@ void __pthread_destroy_specifics()
   void * data;
 
   for (i = 0; i < PTHREAD_KEYS_MAX; i++) {
+    // 销毁时执行的函数
     destr = pthread_keys[i].destr;
+    // 获取键对应的值
     data = self->p_specific[i];
+    // 执行
     if (destr != NULL && data != NULL) destr(data);
   }
 }

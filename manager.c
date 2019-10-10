@@ -225,6 +225,7 @@ static int pthread_handle_create(pthread_t *thread, const pthread_attr_t *attr,
     // 存储线程元数据的地方
     new_thread = THREAD_SEG(sseg);
     /* Allocate space for stack and thread descriptor. */
+    // 给线程分配栈
     if (mmap((caddr_t)((char *)(new_thread+1) - INITIAL_STACK_SIZE),
 	     INITIAL_STACK_SIZE, PROT_READ | PROT_WRITE | PROT_EXEC,
 	     MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED | MAP_GROWSDOWN, -1, 0)
@@ -298,7 +299,7 @@ static int pthread_handle_create(pthread_t *thread, const pthread_attr_t *attr,
 }
 
 /* Free the resources of a thread. */
-
+// 释放线程资源
 static void pthread_free(pthread_t th)
 {
   size_t sseg;
@@ -312,7 +313,7 @@ static void pthread_free(pthread_t th)
 }
 
 /* Handle threads that have exited */
-
+// 
 static void pthread_exited(pid_t pid)
 {
   pthread_t th;
