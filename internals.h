@@ -190,12 +190,15 @@ static inline pthread_t thread_self (void)
   THREAD_SELF
 #else
   char *sp = CURRENT_STACK_FRAME;
+  // 大于初始化栈则是主线程
   if (sp >= __pthread_initial_thread_bos)
     return &__pthread_initial_thread;
+  // 这是manager线程自己申请的空间
   else if (sp >= __pthread_manager_thread_bos
 	   && sp < __pthread_manager_thread_tos)
     return &__pthread_manager_thread;
   else
+    // sp肯定落在某个线程的栈范围内，STACK_SIZE-1使得低n位全1， 或sp再加1即往高地址，按STACK_SIZE对齐，减去一个pthread_t得到tcb
     return (pthread_t) (((unsigned long int) sp | (STACK_SIZE - 1)) + 1) - 1;
 #endif
 }
