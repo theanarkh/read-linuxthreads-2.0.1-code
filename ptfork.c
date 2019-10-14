@@ -79,7 +79,16 @@ static inline void pthread_call_handlers(struct handler_list * list)
 
 extern int __fork(void);
 // http://man7.org/linux/man-pages/man3/pthread_atfork.3.html
-// 劫持系统的fork
+/*
+glibc中定义了fork和__fork的关系。
+weak_alias (__fork, fork)
+# define weak_alias(name, aliasname) _weak_alias (name, aliasname)
+# define _weak_alias(name, aliasname) \
+  extern __typeof (name) aliasname __attribute__ ((weak, alias (#name)))
+fork是弱符号，并且是__fork的的别名。即如果定义了fork，则会覆盖glibc中的fork。
+这里就是覆盖glibc的fork，然后在调用glibc的__fork之前执行一些额外的操作。这样用户在执行fork的时候，
+就会执行下面这个fork函数，从而执行glibc的__fork
+*/
 int fork(void)
 {
   int pid;
