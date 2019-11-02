@@ -212,3 +212,6 @@ KNOWN BUGS AND LIMITATIONS:
   processes (with distinct address spaces), you'd be better off
   with traditional Unix synchronization tools (pipes, sockets, SystemV
   IPCs, etc.)
+ 
+### [源码分析文章](https://zhuanlan.zhihu.com/c_1094189343643652096)
+
