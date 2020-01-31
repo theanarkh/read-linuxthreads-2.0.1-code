@@ -225,7 +225,7 @@ static int pthread_handle_create(pthread_t *thread, const pthread_attr_t *attr,
     // 存储线程元数据的地方
     new_thread = THREAD_SEG(sseg);
     /* Allocate space for stack and thread descriptor. */
-    // 给线程分配栈
+    // 给线程分配栈，分配的空间中，new_thread在高地址，剩下的内存是栈（栈底为new_thread - 1）
     if (mmap((caddr_t)((char *)(new_thread+1) - INITIAL_STACK_SIZE),
 	     INITIAL_STACK_SIZE, PROT_READ | PROT_WRITE | PROT_EXEC,
 	     MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED | MAP_GROWSDOWN, -1, 0)
@@ -308,12 +308,13 @@ static void pthread_free(pthread_t th)
   /* Free the stack and thread descriptor area */
   ASSERT(th->p_exited);
   sseg = SEG_THREAD(th);
+  // 释放栈和tcb空间
   munmap((caddr_t) ((char *)(th+1) - STACK_SIZE), STACK_SIZE);
   stack_segments[sseg] = 0;
 }
 
 /* Handle threads that have exited */
-// 
+// 处理单个线程的退出操作 
 static void pthread_exited(pid_t pid)
 {
   pthread_t th;
@@ -360,7 +361,7 @@ static void pthread_reap_children(void)
     if (WIFSIGNALED(status)) {
       /* If a thread died due to a signal, send the same signal to
          all other threads, including the main thread. */
-      // 给所有线程发送信号
+      // 单个线程异常退出，给所有线程发送信号，进程也需要退出
       pthread_kill_all_threads(WTERMSIG(status), 1);
       _exit(0);
     }

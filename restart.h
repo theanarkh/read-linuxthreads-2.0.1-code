@@ -30,8 +30,9 @@ static inline void suspend(pthread_t self)
   sigdelset(&mask, PTHREAD_SIG_RESTART); /* Unblock the restart signal */
   do {
     /*
-      挂起直到指定的被restart信号发生,信号处理函数__pthread_sighandler执行完，则返回到这，
-      p_signal在信号处理函数__pthread_sighandler中赋值
+      设置信号屏蔽位为mask，sigsuspend在信号处理程序执行完后返回，恢复执行sigsuspend之前的信号屏蔽位
+      挂起直到没有被屏蔽的信号产生，但是只有restart信号产生时，才推出while,
+      信号处理函数__pthread_sighandler执行完，则返回到这，p_signal在信号处理函数__pthread_sighandler中赋值
     */
     sigsuspend(&mask);                   /* Wait for signal */
   } while (self->p_signal != PTHREAD_SIG_RESTART);
@@ -55,13 +56,13 @@ static inline void suspend_with_cancellation(pthread_t self)
     // 已经被取消并且是可取消的则直接返回，否则挂起等待唤醒
     if (! (self->p_canceled && self->p_cancelstate == PTHREAD_CANCEL_ENABLE)) {
       do {
-        // 挂起等待restart信号，从信号处理函数返回，自动恢复对restart信号的屏蔽
+        // 挂起等待restart信号
         sigsuspend(&mask);               /* Wait for a signal */
       } while (self->p_signal != PTHREAD_SIG_RESTART);
     }
     self->p_cancel_jmp = NULL;
   } else {
-    // 从siglongjmp返回的，siglongjmp之前会清除self->p_cancel_jmp,重新设置信号掩码,屏蔽restart信号
+    // 从cancel信号的处理函数中的siglongjmp返回，重新设置信号掩码,屏蔽restart信号
     sigaddset(&mask, PTHREAD_SIG_RESTART); /* Reblock the restart signal */
     sigprocmask(SIG_SETMASK, &mask, NULL);
   }

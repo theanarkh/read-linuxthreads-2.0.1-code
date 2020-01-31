@@ -139,6 +139,7 @@ void __pthread_initialize(void)
   /* For the initial stack, reserve at least STACK_SIZE bytes of stack
      below the current stack address, and align that on a
      STACK_SIZE boundary. */
+  // 主线程的栈顶，即栈的低地址,CURRENT_STACK_FRAME是当前esp
   __pthread_initial_thread_bos =
     // 按STACK_SIZE大小对齐
     (char *)(((long)CURRENT_STACK_FRAME - 2 * STACK_SIZE) & ~(STACK_SIZE - 1));
@@ -180,10 +181,10 @@ static int pthread_initialize_manager(void)
   int manager_pipe[2];
 
   /* Setup stack for thread manager */
-  // 在堆上分配一块内存用于manager线程的栈
+  // 在堆上分配一块内存用于manager线程的栈，__pthread_manager_thread_bos是栈顶
   __pthread_manager_thread_bos = malloc(THREAD_MANAGER_STACK_SIZE);
   if (__pthread_manager_thread_bos == NULL) return -1;
-  // limit
+  // 栈底，即栈的开始地址，地址从大到小增长
   __pthread_manager_thread_tos =
     __pthread_manager_thread_bos + THREAD_MANAGER_STACK_SIZE;
   /* Setup pipe to communicate with thread manager */
@@ -196,7 +197,9 @@ static int pthread_initialize_manager(void)
   /* Start the thread manager */
   // 新建一个manager线程,manager_pipe是__thread_manager函数的入参
   if (__clone(__pthread_manager,
+        // 栈底
 	      __pthread_manager_thread_tos,
+        // 共享内存，文件系统信息，文件描述符，信号处理函数集（屏蔽码和已收到的信号不共享）
 	      CLONE_VM | CLONE_FS | CLONE_FILES | CLONE_SIGHAND,
 	      (void *)(long)manager_pipe[0]) == -1) {
     free(__pthread_manager_thread_bos);
@@ -292,14 +295,15 @@ static void pthread_exit_process(int retcode, void *arg)
    (for pthread_cond_timedwait). Also used in sigwait.
    For the thread manager thread, redirect the signal to
    pthread_manager_sighandler. */
-// 信号处理函数
+// PTHREAD_SIG_RESTART信号的处理函数
 void __pthread_sighandler(int sig)
 {
   pthread_t self = thread_self();
+  // 管理线程收到PTHREAD_SIG_RESTART信号，则终止所有子线程
   if (self == &__pthread_manager_thread) {
     __pthread_manager_sighandler(sig);
   } else {
-    // 记录收到的信号
+    // 一般线程收到信号，记录收到的信号
     self->p_signal = sig;
     // 可以直接跳回到调用处，即sigsetjump处
     if (self->p_signal_jmp != NULL) siglongjmp(*self->p_signal_jmp, 1);
