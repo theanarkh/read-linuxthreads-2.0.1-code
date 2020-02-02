@@ -42,14 +42,14 @@ static inline void suspend_with_cancellation(pthread_t self)
 {
   sigset_t mask;
   sigjmp_buf jmpbuf;
-  // 获取当前的信号掩码
+  // 获取当前的信号屏蔽码
   sigprocmask(SIG_SETMASK, NULL, &mask); /* Get current signal mask */
   // 清除PTHREAD_SIG_RESTART的信号掩码，即允许处理该信号
   sigdelset(&mask, PTHREAD_SIG_RESTART); /* Unblock the restart signal */
   /* No need to save the signal mask, we'll restore it ourselves */
   /*
     直接调用返回0，从siglongjump回来返回非0,这里支持线程挂起时，
-    收到restart信号被唤醒，或者在信号处理函数中，通过siglongjmp返回这里
+    收到restart信号被唤醒，或者在取消信号的处理函数中，通过siglongjmp返回这里
   */
   if (sigsetjmp(jmpbuf, 0) == 0) {
     self->p_cancel_jmp = &jmpbuf;

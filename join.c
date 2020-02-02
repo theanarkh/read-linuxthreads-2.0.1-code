@@ -68,7 +68,7 @@ void pthread_exit(void * retval)
   }
   /* Exit the process (but don't flush stdio streams, and don't run
      atexit functions). */
-  // 线程退出，见操作系统实现
+  // 线程退出，见操作系统实现，tcb还在，在join的时候由manage线程回收
   _exit(0);
 }
 // 调用该函数的线程会等待th线程结束

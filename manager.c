@@ -106,6 +106,7 @@ int __pthread_manager(void *arg)
       return 0;
     }
     /* Check for dead children */
+    // manage线程收到restart信号的时候设置terminated_children，终止所有子线程，包括manage线程自己
     if (terminated_children) {
       terminated_children = 0;
       pthread_reap_children();
@@ -132,15 +133,18 @@ int __pthread_manager(void *arg)
       case REQ_FREE:
         pthread_handle_free(request.req_args.free.thread);
         break;
+      // 杀死除了req_thread线程之外的线程
       case REQ_PROCESS_EXIT:
         pthread_handle_exit(request.req_thread,
                             request.req_args.exit.code);
         break;
+      // 主线程执行了pthread_exit
       case REQ_MAIN_THREAD_EXIT:
         // 标记主线程退出
         main_thread_exiting = 1;
         // 其他线程已经退出了，只有主线程了，唤醒主线程，主线程也退出，见pthread_exit，如果还有子线程没退出则主线程不能退出
         if (__pthread_main_thread->p_nextlive == __pthread_main_thread) {
+          // 唤醒主线程，然后他自己退出，见pthread_exit
           restart(__pthread_main_thread);
           return 0;
         }
@@ -348,12 +352,12 @@ static void pthread_exited(pid_t pid)
     _exit(0);
   }
 }
-
+// 处理所有子线程的退出
 static void pthread_reap_children(void)
 {
   pid_t pid;
   int status;
-  // 判断是否有clone的子进程结束，如果没有直接返回
+  // 判断是否有clone的子进程（线程）结束，如果没有直接返回
   while ((pid = __libc_waitpid(-1, &status, WNOHANG | __WCLONE)) > 0) {
     // 该进程已经退出， 从链表中删除和回收他的资源
     pthread_exited(pid);
@@ -410,6 +414,7 @@ static void pthread_handle_exit(pthread_t issuing_thread, int exitcode)
      thread, but excluding the thread from which the exit request originated
      (that thread must complete the exit, e.g. calling atexit functions
      and flushing stdio buffers). */
+  // 从下一个线程开始，因为issue_thread进程本身不退出
   for (th = issuing_thread->p_nextlive;
        th != issuing_thread;
        th = th->p_nextlive) {
@@ -422,7 +427,7 @@ static void pthread_handle_exit(pthread_t issuing_thread, int exitcode)
 }
 
 /* Handler for PTHREAD_SIG_RESTART in thread manager thread */
-
+// 管理线程收到PTHREAD_SIG_RESTART信号，则终止所有子线程
 void __pthread_manager_sighandler(int sig)
 {
   terminated_children = 1;

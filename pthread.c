@@ -305,7 +305,7 @@ void __pthread_sighandler(int sig)
   } else {
     // 一般线程收到信号，记录收到的信号
     self->p_signal = sig;
-    // 可以直接跳回到调用处，即sigsetjump处
+    // 该线程在等待restart信号则直接跳回到调用处，即sigsetjump处
     if (self->p_signal_jmp != NULL) siglongjmp(*self->p_signal_jmp, 1);
   }
 }
@@ -317,14 +317,16 @@ static void pthread_handle_sigcancel(int sig)
 {
   pthread_t self = thread_self();
   sigjmp_buf * jmpbuf;
-  // pthread_handle_exit=1说明是线程退出，在pthread_handle_exit中设置
+  // pthread_handle_exit=1说明是除了自己外的其他线程已经退出，则收到取消信号时整个进程退出，在pthread_handle_exit中设置
   if (__pthread_exit_requested)
     _exit(__pthread_exit_code);
-  // 需要立刻退出的取消信号
+  // 某个线程退出了
+  // 该线程被取消了（在pthread_cancel设置），
   if (self->p_canceled && self->p_cancelstate == PTHREAD_CANCEL_ENABLE) {
+    // 需要立即取消，则线程退出
     if (self->p_canceltype == PTHREAD_CANCEL_ASYNCHRONOUS)
       pthread_exit(PTHREAD_CANCELED);
-    // 跳回到sigsetjump
+    // 延迟取消 1 在等待cancel信号则跳回到sigsetjump 2 不处理该信号
     jmpbuf = self->p_cancel_jmp;
     if (jmpbuf != NULL) {
       self->p_cancel_jmp = NULL;
@@ -344,6 +346,7 @@ void __pthread_reset_main_thread()
   pthread_t self = thread_self();
 
   /* Free the thread manager stack */
+  // 释放管理线程的栈，因为已经不需要管理线程了
   free(__pthread_manager_thread_bos);
   __pthread_manager_thread_bos = __pthread_manager_thread_tos = NULL;
   /* Close the two ends of the pipe */
@@ -357,21 +360,21 @@ void __pthread_reset_main_thread()
   /* Make the forked thread the main thread */
   // 设置当前线程为主线程 
   __pthread_main_thread = self;
-  // 链表中只有一个线程，就是自己
+  // 链表中只有一个线程，就是自己，相当于一个进程里只有一个线程
   self->p_nextlive = self;
   self->p_nextlive = self;
 }
 
 /* Process-wide exec() request */
-// 杀死除了自己之外的其他线程
+// 某个线程执行exec时，杀死除了自己之外的其他线程
 void __pthread_kill_other_threads_np(void)
 {
   /* Terminate all other threads and thread manager */
-  // 杀死其他线程
+  // 杀死除了执行exec线程外的其他线程
   pthread_exit_process(0, NULL);
   /* Make current thread the main thread in case the calling thread
      changes its mind, does not exec(), and creates new threads instead. */
-  // 使得自己为主线程
+  // 执行exec的线程使自己为主线程
   __pthread_reset_main_thread();
 }
 weak_alias (__pthread_kill_other_threads_np, pthread_kill_other_threads_np)
