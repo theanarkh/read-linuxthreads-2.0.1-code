@@ -14,7 +14,7 @@
 /* GNU Library General Public License for more details.                 */
 
 /* Spin locks */
-
+// 获得锁，testandset是原子操作，失败则让出cpu，等待唤醒
 static inline void acquire(int * spinlock)
 {
   while (testandset(spinlock)) sched_yield();
